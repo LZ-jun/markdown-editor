@@ -1,0 +1,1873 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Markdown 编辑器</title>
+<style>
+  :root{
+    --bg:#eef1f5; --panel:#ffffff; --panel-2:#f7f9fc; --border:#dde2e8; --border-strong:#cfd6de;
+    --text:#1f2329; --muted:#79808a; --accent:#2b6cf6; --accent-strong:#1a56d6; --accent-soft:#e9f0ff;
+    --code-bg:#f5f7fa; --shadow:0 8px 28px rgba(20,30,50,.14); --toolbar:#ffffff;
+  }
+  [data-theme="dark"]{
+    --bg:#111318; --panel:#191c22; --panel-2:#1f232b; --border:#2b313a; --border-strong:#3a4250;
+    --text:#e5e8eb; --muted:#8b939e; --accent:#5b93ff; --accent-strong:#7aa8ff; --accent-soft:#1e2a44;
+    --code-bg:#232830; --shadow:0 8px 28px rgba(0,0,0,.45); --toolbar:#191c22;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden;font-size:14px;
+  }
+  svg{width:16px;height:16px;flex:none}
+
+  /* ---------- 标题栏 ---------- */
+  .titlebar{
+    display:flex;align-items:center;gap:12px;padding:7px 12px;background:var(--panel);
+    border-bottom:1px solid var(--border);user-select:none;flex:none;
+  }
+  .logo{
+    width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2b6cf6,#7c4dff);
+    color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex:none;
+  }
+  .file-name{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px;min-width:0}
+  .file-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none;opacity:.35}
+  .dot.on{background:#f0a020;opacity:1}
+  .titlebar .spacer{flex:1}
+  .tb-right{display:flex;align-items:center;gap:6px}
+
+  /* ---------- 工具栏 ---------- */
+  .toolbar{
+    display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:5px 8px;background:var(--toolbar);
+    border-bottom:1px solid var(--border);flex:none;row-gap:4px;
+  }
+  .tb-sep{width:1px;height:20px;background:var(--border);margin:0 6px;flex:none}
+  .tb-btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:3px;height:30px;min-width:30px;padding:0 7px;
+    border:1px solid transparent;border-radius:7px;background:transparent;color:var(--text);
+    font-size:13px;font-family:inherit;cursor:pointer;user-select:none;transition:background .12s,border-color .12s;white-space:nowrap;
+  }
+  .tb-btn:hover{background:var(--accent-soft);border-color:var(--border)}
+  .tb-btn:active{transform:translateY(1px)}
+  .tb-btn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-strong)}
+  .tb-btn.disabled{opacity:.35;pointer-events:none}
+  .tb-btn .big{font-size:15px;line-height:1}
+  .tb-select{
+    height:30px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--text);
+    font-family:inherit;font-size:12.5px;padding:0 6px;cursor:pointer;outline:none;
+  }
+  .tb-select:focus{border-color:var(--accent)}
+
+  /* ---------- 工作区 ---------- */
+  .workspace{flex:1;display:flex;min-height:0;background:var(--bg)}
+  .pane{display:flex;flex-direction:column;min-width:0;background:var(--panel)}
+  .pane-editor{flex:1 1 50%}
+  .pane-preview{flex:1 1 50%}
+  .pane-head{
+    display:flex;align-items:center;gap:10px;padding:7px 14px;font-size:12px;letter-spacing:.3px;
+    color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel-2);
+    flex:none;user-select:none;
+  }
+  .pane-head .ttl{color:var(--text);font-weight:600}
+  .pane-head .ttl::before{
+    content:"";display:inline-block;width:3px;height:11px;border-radius:2px;background:var(--accent);
+    margin-right:8px;vertical-align:-1px;
+  }
+  .pane-head .hint{color:var(--muted);opacity:.72;font-size:11.5px}
+  #editor{
+    flex:1;width:100%;border:0;outline:none;resize:none;padding:20px 22px 60px 22px;
+    font-family:"JetBrains Mono",Consolas,"SFMono-Regular",Menlo,monospace;font-size:14.5px;line-height:1.75;
+    background:var(--panel);color:var(--text);tab-size:2;
+  }
+  .preview-scroll{flex:1;overflow:auto;padding:20px 26px 80px 26px;scroll-behavior:auto}
+  .splitter{
+    width:6px;flex:none;cursor:col-resize;background:var(--bg);position:relative;
+  }
+  .splitter::after{content:"";position:absolute;left:2px;top:50%;transform:translateY(-50%);width:2px;height:38px;border-radius:2px;background:var(--border-strong)}
+  .splitter:hover::after{background:var(--accent)}
+
+  /* ---------- 源码面板折叠 / 展开 ---------- */
+  .rail{
+    width:30px;flex:none;background:var(--panel-2);border-right:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);
+    font-size:12px;letter-spacing:4px;writing-mode:vertical-rl;user-select:none;
+  }
+  .rail:hover{background:var(--accent-soft);color:var(--accent)}
+  .pane-mini{
+    height:22px;padding:0 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel);
+    color:var(--muted);font-size:11.5px;font-family:inherit;cursor:pointer;flex:none;
+  }
+  .pane-mini:hover{color:var(--accent);border-color:var(--accent)}
+  .pane-head .grow{flex:1}
+
+  /* ---------- 预览排版 ---------- */
+  .markdown-body{max-width:820px;margin:0 auto;line-height:1.8;font-size:15.5px;word-wrap:break-word}
+  .markdown-body h1,.markdown-body h2,.markdown-body h3,
+  .markdown-body h4,.markdown-body h5,.markdown-body h6{margin:1.2em 0 .6em;font-weight:700;line-height:1.35}
+  .markdown-body h1{font-size:1.9em;border-bottom:1px solid var(--border);padding-bottom:.3em}
+  .markdown-body h2{font-size:1.55em;border-bottom:1px solid var(--border);padding-bottom:.25em}
+  .markdown-body h3{font-size:1.3em}
+  .markdown-body h4{font-size:1.12em}
+  .markdown-body h5{font-size:1em}
+  .markdown-body h6{font-size:.92em;color:var(--muted)}
+  .markdown-body p{margin:.7em 0}
+  .markdown-body a{color:var(--accent);text-decoration:none}
+  .markdown-body a:hover{text-decoration:underline}
+  .markdown-body img{max-width:100%;height:auto;border-radius:8px;display:block;margin:10px 0;border:1px solid var(--border)}
+  .markdown-body ul,.markdown-body ol{margin:.6em 0;padding-left:1.6em}
+  .markdown-body li{margin:.28em 0}
+  .markdown-body li input[type=checkbox]{margin-right:6px;vertical-align:middle}
+  .markdown-body blockquote{
+    margin:.9em 0;padding:.35em 1em;border-left:3px solid var(--accent);background:var(--accent-soft);
+    border-radius:0 6px 6px 0;color:var(--text);
+  }
+  .markdown-body blockquote p{margin:.35em 0}
+  .markdown-body pre{
+    background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;
+    overflow:auto;margin:.9em 0;
+  }
+  .markdown-body pre code{background:none;border:0;padding:0;font-size:13.5px;line-height:1.65}
+  .markdown-body code{
+    font-family:"JetBrains Mono",Consolas,Menlo,monospace;background:var(--code-bg);border:1px solid var(--border);
+    border-radius:5px;padding:.1em .38em;font-size:.88em;
+  }
+  .markdown-body hr{border:0;border-top:1px solid var(--border-strong);margin:1.6em 0}
+  .markdown-body table{border-collapse:collapse;margin:1em 0;width:100%;font-size:.95em;display:block;overflow-x:auto}
+  .markdown-body th,.markdown-body td{border:1px solid var(--border-strong);padding:7px 11px;text-align:left}
+  .markdown-body th{background:var(--panel-2);font-weight:600}
+  .markdown-body mark{background:#ffe58f;color:#1f2329;padding:.05em .2em;border-radius:3px}
+  .markdown-body u{text-decoration:underline}
+
+  /* ---------- 右侧所见即所得编辑区 ---------- */
+  .markdown-body[contenteditable="true"]{outline:none;min-height:60vh;caret-color:var(--accent)}
+  .markdown-body[contenteditable="true"]:empty::before{
+    content:"开始写作…";color:var(--muted);
+  }
+  .markdown-body[contenteditable="true"] ::selection{background:var(--accent-soft)}
+  .markdown-body[contenteditable="true"] img{cursor:default}
+  .markdown-body[contenteditable="true"] input[type=checkbox]{cursor:pointer;pointer-events:none}
+  .markdown-body[contenteditable="true"] table{display:table;width:auto;min-width:60%}
+
+  /* ---------- 状态栏 ---------- */
+  .statusbar{
+    display:flex;align-items:center;gap:14px;padding:0 14px;height:26px;flex:none;
+    background:var(--panel-2);border-top:1px solid var(--border);font-size:12px;color:var(--muted);user-select:none;
+  }
+  .statusbar .grow{flex:1}
+  .statusbar .warn{color:#e08a00}
+
+  /* ---------- 弹窗 / 提示 ---------- */
+  .modal-mask{
+    position:fixed;inset:0;background:rgba(15,20,30,.42);display:none;align-items:center;justify-content:center;z-index:50;
+  }
+  .modal{
+    width:380px;max-width:92vw;background:var(--panel);border-radius:12px;box-shadow:var(--shadow);
+    border:1px solid var(--border);overflow:hidden;
+  }
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px}
+  .modal-close{border:0;background:transparent;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;border-radius:6px}
+  .modal-close:hover{background:var(--accent-soft);color:var(--text)}
+  .modal-body{padding:14px;font-size:13.5px}
+  .field{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .field label{width:64px;color:var(--muted);flex:none;font-size:13px}
+  .field input[type=text],.field input[type=number]{
+    flex:1;height:32px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--text);
+    padding:0 9px;font-family:inherit;font-size:13px;outline:none;min-width:0;
+  }
+  .field input:focus{border-color:var(--accent)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+  .btn{
+    height:32px;padding:0 14px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);
+    color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;
+  }
+  .btn:hover{border-color:var(--border-strong)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-strong)}
+  .kbd-list{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;align-items:center;font-size:13px}
+  .kbd-list b{font-family:Consolas,monospace;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-weight:500;white-space:nowrap}
+  .toast{
+    position:fixed;left:50%;bottom:52px;transform:translate(-50%,14px);background:rgba(28,34,46,.95);color:#fff;
+    padding:9px 16px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:99;
+    max-width:70vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .drop-mask{
+    position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+    background:rgba(43,108,246,.13);border:3px dashed var(--accent);color:var(--accent);font-size:18px;font-weight:600;
+  }
+  .drop-mask.show{display:flex}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="logo">MD</div>
+  <div class="file-name"><span class="dot" id="dirtyDot"></span><span id="fileName">未命名.md</span></div>
+  <div class="spacer"></div>
+  <div class="tb-right" id="tbRight"></div>
+</div>
+
+<div class="toolbar" id="toolbar"></div>
+
+<main class="workspace" id="workspace">
+  <div class="rail hidden" id="srcRail" title="展开 Markdown 源码面板">源码</div>
+  <section class="pane pane-editor" id="paneEditor">
+    <div class="pane-head">
+      <span class="ttl">源码</span>
+      <span class="grow"></span>
+      <button class="pane-mini" id="collapseSrc" title="收起源码面板，文档区全宽">« 收起</button>
+    </div>
+    <textarea id="editor" spellcheck="false" wrap="soft" placeholder="在这里开始书写…"></textarea>
+  </section>
+  <div class="splitter" id="splitter" title="拖动调整分栏"></div>
+  <section class="pane pane-preview" id="panePreview">
+    <div class="pane-head">
+      <span class="ttl">文档</span>
+    </div>
+    <div class="preview-scroll" id="previewScroll">
+      <article class="markdown-body" id="preview" contenteditable="true" spellcheck="false"></article>
+    </div>
+  </section>
+</main>
+
+<div class="statusbar">
+  <span id="stFile">未保存</span>
+  <span class="grow"></span>
+  <span id="stCount">字数 0 · 行 0</span>
+  <span id="stCursor">行 1, 列 1</span>
+  <span id="stImages">内嵌图片 0</span>
+  <span id="stSize">0 B</span>
+</div>
+
+<div class="modal-mask" id="mask"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+<div class="drop-mask" id="dropMask">松开鼠标，图片将内嵌到文档</div>
+<input type="file" id="filePicker" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden />
+<input type="file" id="imgPicker" accept="image/*" multiple hidden />
+
+<script>
+"use strict";
+(function(){
+  /* =======================================================================
+   *  基础工具
+   * ===================================================================== */
+  const el = id => document.getElementById(id);
+  const editor = el('editor');
+  const previewEl = el('preview');
+  const previewScroll = el('previewScroll');
+  const TOK = '\uE000';                       // 占位符私有区字符
+  const TOK_RE = new RegExp(TOK + '(\\d+)' + TOK, 'g');
+
+  /* =======================================================================
+   *  与桌面宿主通信（.exe 里是 WebView2；浏览器里 HOST 为 null）
+   * ===================================================================== */
+  const HOST = (window.chrome && window.chrome.webview) ? window.chrome.webview : null;
+  const HOST_CALLS = Object.create(null);
+  let hostSeq = 0;
+  function hostCall(type, payload){
+    return new Promise(resolve => {
+      if (!HOST){ resolve(null); return; }
+      const id = 'q' + (++hostSeq);
+      HOST_CALLS[id] = resolve;
+      const msg = Object.assign({ id: id, type: type }, payload || {});
+      HOST.postMessage(msg);
+    });
+  }
+  function hostNotify(msg){
+    if (HOST) HOST.postMessage(msg);
+  }
+  if (HOST){
+    HOST.addEventListener('message', ev => {
+      const m = ev.data;
+      if (!m || typeof m !== 'object') return;
+      if (m.id && HOST_CALLS[m.id]){ const r = HOST_CALLS[m.id]; delete HOST_CALLS[m.id]; r(m); return; }
+      if (m.type === 'error') toast(m.message || '发生错误');
+    });
+  }
+
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapeHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const fmtBytes = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB';
+
+  let toastTimer = null;
+  function toast(msg){
+    const t = el('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+  }
+
+  /* =======================================================================
+   *  Markdown 渲染引擎（自研，离线可用）
+   * ===================================================================== */
+  function renderMarkdown(src){
+    const store = [];
+    const push = html => TOK + (store.push(html) - 1) + TOK;
+    const restore = str => str.replace(TOK_RE, (m, i) => store[+i] || '');
+
+    let text = String(src == null ? '' : src).replace(/\r\n?/g, '\n');
+
+    /* 1) 抽取代码块（含未闭合） */
+    const codeBlock = (lang, code) => {
+      const l = String(lang || '').trim();
+      const cls = l ? ' class="language-' + escapeHtml(l).replace(/"/g, '') + '"' : '';
+      return '<pre><code' + cls + '>' + escapeHtml(code.replace(/\n$/, '')) + '</code></pre>';
+    };
+    text = text.replace(/```([^\n]*)\n([\s\S]*?)\n?```/g, (m, lang, code) => '\n' + push(codeBlock(lang, code)) + '\n');
+    text = text.replace(/(^|\n)```([^\n]*)\n([\s\S]*)$/, (m, lead, lang, code) => lead + push(codeBlock(lang, code)));
+
+    /* 2) 抽取行内代码 */
+    text = text.replace(/`([^`\n]+)`/g, (m, c) => push('<code>' + escapeHtml(c) + '</code>'));
+
+    /* 3) 转义所有 HTML（防注入），随后仅放行字号/下划线/高亮 */
+    text = escapeHtml(text);
+
+    /* 4) 行内元素：图片 → 链接 → 强调 */
+    text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, src) =>
+      '<img src="' + src + '" alt="' + alt + '" loading="lazy">');
+    text = text.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (m, txt, href) => {
+      const h = /^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(href) ? href : '#';
+      return '<a href="' + h + '" target="_blank" rel="noopener noreferrer">' + txt + '</a>';
+    });
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
+    text = text.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    text = text.replace(/(^|[^_\w])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>');
+    text = text.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+    text = text.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+
+    /* 5) 放行白名单 HTML（用于字号等富文本） */
+    text = text.replace(/&lt;(\/?)(span|u|mark)((?:\s+style="font-size:\s*\d+(?:\.\d+)?px")?)&gt;/gi,
+      (m, close, tag, attr) => '<' + close + tag.toLowerCase() + attr + '>');
+    text = text.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+
+    /* 6) 块级解析 */
+    function inline(s){ return s.replace(/\n/g, '<br>'); }
+    function isBlockStart(l){
+      return /^\s*$/.test(l)
+        || /^\s{0,3}#{1,6}\s/.test(l)
+        || /^\s{0,3}>/.test(l)
+        || /^\s{0,3}([-*+]|\d{1,9}[.)])\s+/.test(l)
+        || /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l)
+        || TOK_RE.test(l.trim());
+    }
+    function isTableDelim(l){ return /-/.test(l) && /\|/.test(l) && /^[\s|:\-]+$/.test(l); }
+
+    function renderBlocks(block){
+      const lines = block.split('\n');
+      const out = [];
+      let i = 0;
+      while (i < lines.length){
+        const line = lines[i];
+
+        if (/^\s*$/.test(line)){ i++; continue; }
+        if (TOK_RE.test(line.trim())){ out.push(restore(line.trim())); i++; continue; }
+
+        /* 标题 */
+        let m = /^(#{1,6})\s+(.*)$/.exec(line);
+        if (m){ out.push('<h' + m[1].length + '>' + inline(m[2]) + '</h' + m[1].length + '>'); i++; continue; }
+
+        /* 水平线 / Setext 标题 */
+        if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(line)){
+          const last = out.length ? out[out.length - 1] : '';
+          if (last.startsWith('<p>')){
+            const isSetextH1 = /^\s{0,3}_+\s*$/.test(line);
+            out[out.length - 1] = last.replace(/^<p>/, isSetextH1 ? '<h1>' : '<h2>').replace(/<\/p>$/, isSetextH1 ? '</h1>' : '</h2>');
+          } else {
+            out.push('<hr>');
+          }
+          i++; continue;
+        }
+        if (/^\s{0,3}=+\s*$/.test(line)){
+          const last = out.length ? out[out.length - 1] : '';
+          if (last.startsWith('<p>')) out[out.length - 1] = last.replace(/^<p>/, '<h1>').replace(/<\/p>$/, '</h1>');
+          else out.push('<h1></h1>');
+          i++; continue;
+        }
+
+        /* 引用 */
+        if (/^\s{0,3}>\s?/.test(line)){
+          const buf = [];
+          while (i < lines.length && (/^\s{0,3}>\s?/.test(lines[i]) || (/^\s*$/.test(lines[i]) && i + 1 < lines.length && /^\s{0,3}>\s?/.test(lines[i + 1])))){
+            buf.push(lines[i].replace(/^\s{0,3}>\s?/, ''));
+            i++;
+          }
+          out.push('<blockquote>' + renderBlocks(buf.join('\n')) + '</blockquote>');
+          continue;
+        }
+
+        /* 表格 */
+        if (line.includes('|') && i + 1 < lines.length && isTableDelim(lines[i + 1])){
+          const splitRow = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+          const heads = splitRow(line);
+          const aligns = splitRow(lines[i + 1]).map(d =>
+            /^:-+:$/.test(d) ? 'center' : /^:-+/.test(d) ? 'left' : /-+:$/.test(d) ? 'right' : '');
+          i += 2;
+          const rows = [];
+          while (i < lines.length && lines[i].includes('|') && !/^\s*$/.test(lines[i])){
+            rows.push(splitRow(lines[i])); i++;
+          }
+          const th = heads.map((h, k) => '<th' + (aligns[k] ? ' style="text-align:' + aligns[k] + '"' : '') + '>' + inline(h) + '</th>').join('');
+          const trs = rows.map(r =>
+            '<tr>' + heads.map((_, k) => '<td' + (aligns[k] ? ' style="text-align:' + aligns[k] + '"' : '') + '>' + inline(r[k] || '') + '</td>').join('') + '</tr>').join('');
+          out.push('<table><thead><tr>' + th + '</tr></thead><tbody>' + trs + '</tbody></table>');
+          continue;
+        }
+
+        /* 列表 */
+        if (/^\s{0,3}([-*+]|\d{1,9}[.)])\s+/.test(line)){
+          const items = [];
+          while (i < lines.length){
+            const cur = lines[i];
+            if (/^\s*$/.test(cur)) break;
+            const mm = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/.exec(cur);
+            if (mm){
+              items.push({ indent: mm[1].replace(/\t/g, '  ').length, ordered: /\d/.test(mm[2]), text: mm[3] });
+              i++; continue;
+            }
+            if (items.length && /^\s{2,}\S/.test(cur)){    // 续行
+              items[items.length - 1].text += '\n' + cur.trim();
+              i++; continue;
+            }
+            break;
+          }
+          const build = (start, indent, ordered) => {
+            let k = start;
+            let html = '<' + (ordered ? 'ol' : 'ul') + '>';
+            while (k < items.length && items[k].indent >= indent){
+              if (items[k].indent > indent) break;
+              if (items[k].ordered !== ordered) break;
+              const it = items[k]; k++;
+              let child = '';
+              if (k < items.length && items[k].indent > indent){
+                const r = build(k, items[k].indent, items[k].ordered);
+                child = r.html; k = r.next;
+              }
+              let t = it.text, cb = '';
+              const task = /^\[([ xX])\]\s*/.exec(t);
+              if (task){ cb = '<input type="checkbox" disabled' + (/[xX]/.test(task[1]) ? ' checked' : '') + '> '; t = t.slice(task[0].length); }
+              html += '<li>' + cb + inline(t) + child + '</li>';
+            }
+            html += '</' + (ordered ? 'ol' : 'ul') + '>';
+            return { html, next: k };
+          };
+          let k = 0, html = '';
+          while (k < items.length){ const r = build(k, items[0].indent, items[k].ordered); html += r.html; k = r.next; }
+          out.push(html);
+          continue;
+        }
+
+        /* 段落 */
+        const buf = [line];
+        i++;
+        while (i < lines.length && !isBlockStart(lines[i])){ buf.push(lines[i]); i++; }
+        out.push('<p>' + inline(buf.join('\n')) + '</p>');
+      }
+      return out.join('\n');
+    }
+
+    return restore(renderBlocks(text));
+  }
+
+  /* =======================================================================
+   *  视图 / 状态
+   * ===================================================================== */
+  const state = {
+    fileName: '未命名.md',
+    filePath: null,
+    dirty: false,
+    srcCollapsed: false,
+    theme: 'light',
+    syncScroll: true
+  };
+
+  let renderTimer = null;
+  let syncing = false;
+  function renderNow(){
+    previewEl.innerHTML = renderMarkdown(editor.value);
+  }
+  function scheduleRender(){
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(renderNow, 130);
+  }
+  /* 源码 → 右侧（左侧在输入时调用；此时右侧未聚焦，替换 innerHTML 无光标问题） */
+  function renderFromSource(){
+    if (syncing) return;
+    syncing = true;
+    renderNow();
+    syncing = false;
+  }
+  /* 右侧 → 源码（右侧在输入时调用；左侧未聚焦，改 value 无光标问题） */
+  function syncRichToSource(){
+    if (syncing) return;
+    clearTimeout(renderTimer);
+    syncing = true;
+    editor.value = htmlToMarkdown(previewEl);
+    syncing = false;
+    onContentChanged(false, true);
+    commitHistoryDebounced();
+  }
+
+  /* =======================================================================
+   *  历史（撤销 / 重做）
+   * ===================================================================== */
+  const history = { stack: [], index: -1, timer: null, mute: false };
+  function commitHistory(){
+    if (history.mute) return;
+    const snap = { value: editor.value, s: editor.selectionStart, e: editor.selectionEnd };
+    const cur = history.stack[history.index];
+    if (cur && cur.value === snap.value) return;
+    history.stack = history.stack.slice(0, history.index + 1);
+    history.stack.push(snap);
+    if (history.stack.length > 250) history.stack.shift();
+    history.index = history.stack.length - 1;
+    updateHistoryButtons();
+  }
+  function commitHistoryDebounced(){
+    if (history.mute) return;
+    clearTimeout(history.timer);
+    history.timer = setTimeout(commitHistory, 320);
+  }
+  function resetHistory(){
+    clearTimeout(history.timer);
+    history.stack = [{ value: editor.value, s: 0, e: 0 }];
+    history.index = 0;
+    updateHistoryButtons();
+  }
+  function applySnapshot(snap){
+    history.mute = true;
+    editor.value = snap.value;
+    editor.setSelectionRange(snap.s, snap.e);
+    history.mute = false;
+    onContentChanged(true);
+  }
+  function undo(){
+    clearTimeout(history.timer); commitHistory();
+    if (history.index > 0){ history.index--; applySnapshot(history.stack[history.index]); }
+  }
+  function redo(){
+    clearTimeout(history.timer); commitHistory();
+    if (history.index < history.stack.length - 1){ history.index++; applySnapshot(history.stack[history.index]); }
+  }
+  function updateHistoryButtons(){
+    const u = document.querySelector('[data-cmd="undo"]');
+    const r = document.querySelector('[data-cmd="redo"]');
+    if (u) u.classList.toggle('disabled', history.index <= 0);
+    if (r) r.classList.toggle('disabled', history.index >= history.stack.length - 1);
+  }
+
+  /* =======================================================================
+   *  内容变更统一入口
+   * ===================================================================== */
+  let autosaveTimer = null;
+  function onContentChanged(immediate, skipRich){
+    state.dirty = true;
+    updateTitle();
+    updateStatus();
+    if (!skipRich){ if (immediate) renderNow(); else scheduleRender(); }
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(autosaveDraft, 800);
+  }
+  function setValue(newValue, selStart, selEnd){
+    editor.value = newValue;
+    if (selStart != null){
+      const a = selStart, b = (selEnd == null) ? selStart : selEnd;
+      editor.setSelectionRange(a, b);
+    }
+    editor.focus();
+    onContentChanged(true);
+    commitHistory();
+    syncScrollToPreview();
+  }
+
+  function updateTitle(){
+    el('fileName').textContent = state.fileName;
+    el('dirtyDot').classList.toggle('on', state.dirty);
+    const t = (state.dirty ? '● ' : '') + state.fileName + ' — Markdown 编辑器';
+    document.title = t;
+    hostNotify({ type: 'title', title: t });
+  }
+
+  function updateStatus(){
+    const v = editor.value;
+    const lines = v ? v.split('\n').length : 0;
+    const chars = v.replace(/\s/g, '').length;
+    const imgs = (v.match(/!\[[^\]]*\]\(data:image\//g) || []).length;
+    const bytes = new Blob([v]).size;
+    el('stCount').textContent = '字数 ' + chars + ' · 行 ' + lines;
+    el('stImages').textContent = '内嵌图片 ' + imgs;
+    el('stSize').textContent = fmtBytes(bytes);
+    el('stSize').classList.toggle('warn', bytes > 4 * 1048576);
+    el('stImages').classList.toggle('warn', imgs > 0 && bytes > 4 * 1048576);
+    const p = editor.selectionStart;
+    const before = v.slice(0, p);
+    const ln = before.split('\n').length;
+    const col = p - before.lastIndexOf('\n');
+    el('stCursor').textContent = '行 ' + ln + ', 列 ' + col;
+  }
+
+  /* =======================================================================
+   *  插入 / 格式化
+   * ===================================================================== */
+  function wrapSelection(before, after, placeholder){
+    placeholder = placeholder || '文本';
+    const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+    const inner = v.slice(s, e) || placeholder;
+    const nv = v.slice(0, s) + before + inner + after + v.slice(e);
+    setValue(nv, s + before.length, s + before.length + inner.length);
+  }
+
+  function applyLinePrefix(prefix, opts){
+    opts = opts || {};
+    const v = editor.value;
+    const s = editor.selectionStart, e = editor.selectionEnd;
+    const start = v.lastIndexOf('\n', s - 1) + 1;
+    let end = v.indexOf('\n', e); if (end < 0) end = v.length;
+    const lines = v.slice(start, end).split('\n');
+    const target = lines.filter(l => l.trim() !== '');
+    const list = target.length ? target : lines;
+    const re = new RegExp('^\\s*' + escapeRegExp(prefix));
+    const all = list.every(l => re.test(l));
+    const out = lines.map(l => {
+      if (l.trim() === '') return l;
+      if (all) return l.replace(re, '');
+      let t = l;
+      if (opts.replaceHeading) t = t.replace(/^\s*#{1,6}\s+/, '');
+      if (opts.stripOtherPrefix) t = t.replace(/^\s*(-\s\[[ xX]\]\s|-\s|\d{1,9}\.\s)/, '');
+      return prefix + t;
+    }).join('\n');
+    setValue(v.slice(0, start) + out + v.slice(end), start, start + out.length);
+  }
+
+  function insertAtCursor(text){
+    const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+    let t = String(text).replace(/^\n+/, '');
+    const pre = (s === 0 || v[s - 1] === '\n') ? '' : '\n';
+    const post = (e >= v.length || v[e] === '\n') ? '' : '\n';
+    const nv = v.slice(0, s) + pre + t + post + v.slice(e);
+    const caret = s + pre.length + t.length;
+    setValue(nv, caret, caret);
+  }
+
+  function bumpFont(delta){
+    const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+    const sel = v.slice(s, e);
+    const m = /font-size:\s*(\d+(?:\.\d+)?)px/.exec(sel);
+    if (m){
+      const base = clamp(Math.round(parseFloat(m[1]) + delta), 10, 72);
+      const nv = v.slice(0, s) + sel.replace(/font-size:\s*(\d+(?:\.\d+)?)px/g, 'font-size:' + base + 'px') + v.slice(e);
+      setValue(nv, s, s + (nv.length - v.length) + (e - s));
+      return;
+    }
+    if (!sel){ toast('请先选中文字再调整字号'); return; }
+    const size = clamp(16 + delta, 10, 72);
+    wrapSelection('<span style="font-size:' + size + 'px">', '</span>');
+  }
+
+  function setFontSize(px){
+    if (px === 'clear'){ clearFontSize(); return; }
+    const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+    const sel = v.slice(s, e);
+    if (!sel){ toast('请先选中文字再调整字号'); return; }
+    if (sel.includes('font-size:')){
+      const nv = v.slice(0, s) + sel.replace(/font-size:\s*\d+(?:\.\d+)?px/g, 'font-size:' + px + 'px') + v.slice(e);
+      setValue(nv, s, e);
+      return;
+    }
+    wrapSelection('<span style="font-size:' + px + 'px">', '</span>');
+  }
+  function clearFontSize(){
+    const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+    const sel = v.slice(s, e);
+    if (!sel || !sel.includes('font-size:')){ toast('选区内没有字号设置'); return; }
+    const cleaned = sel.replace(/<span style="font-size:\s*\d+(?:\.\d+)?px">/g, '').replace(/<\/span>/g, '');
+    setValue(v.slice(0, s) + cleaned + v.slice(e), s, s + cleaned.length);
+  }
+
+  function insertCodeBlock(){
+    const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+    const sel = v.slice(s, e);
+    if (!sel){ insertAtCursor('```\n在此输入代码\n```'); return; }
+    const pre = (s === 0 || v[s - 1] === '\n') ? '' : '\n';
+    const post = (e >= v.length || v[e] === '\n') ? '' : '\n';
+    const text = pre + '```\n' + sel + '\n```' + post;
+    const nv = v.slice(0, s) + text + v.slice(e);
+    const caret = s + pre.length + 4;
+    setValue(nv, caret, caret + sel.length);
+  }
+
+  function insertTable(rows, cols){
+    if (activeSurface === 'rich'){
+      previewEl.focus(); restoreRichRange();
+      richTable(rows, cols);
+      saveRichRange(); syncRichToSource();
+      return;
+    }
+    rows = clamp(rows, 2, 30); cols = clamp(cols, 1, 10);
+    const head = '| ' + Array.from({ length: cols }, (_, k) => '表头' + (k + 1)).join(' | ') + ' |';
+    const delim = '| ' + Array.from({ length: cols }, () => '---').join(' | ') + ' |';
+    const body = Array.from({ length: rows - 1 }, (_, r) =>
+      '| ' + Array.from({ length: cols }, () => '内容' + (r + 1)).join(' | ') + ' |');
+    insertAtCursor([head, delim].concat(body).join('\n'));
+  }
+
+  /* =======================================================================
+   *  图片：粘贴 / 拖拽 / 插入 → base64 内嵌
+   * ===================================================================== */
+  function blobToDataURL(file){
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+
+  function compressImage(file){
+    const MAXW = 1400, MAXCAND = 700 * 1024;
+    return new Promise(resolve => {
+      const isPng = /png/i.test(file.type);
+      if (file.size <= MAXCAND && isPng){ blobToDataURL(file).then(resolve); return; }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        try{
+          const scale = img.width > MAXW ? MAXW / img.width : 1;
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          if (scale === 1 && file.size <= MAXCAND){
+            URL.revokeObjectURL(url); blobToDataURL(file).then(resolve); return;
+          }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const type = isPng ? 'image/png' : 'image/jpeg';
+          const out = type === 'image/jpeg' ? c.toDataURL('image/jpeg', 0.9) : c.toDataURL('image/png');
+          URL.revokeObjectURL(url);
+          resolve(out);
+        }catch(err){
+          URL.revokeObjectURL(url);
+          blobToDataURL(file).then(resolve).catch(() => resolve(''));
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); blobToDataURL(file).then(resolve).catch(() => resolve('')); };
+      img.src = url;
+    });
+  }
+
+  async function insertImageFile(file){
+    if (!file || !/^image\//.test(file.type)) return false;
+    const dataUrl = await compressImage(file);
+    if (!dataUrl) { toast('图片读取失败'); return false; }
+    if (activeSurface === 'rich'){
+      previewEl.focus();
+      if (!restoreRichRange()){
+        const r = document.createRange();
+        r.selectNodeContents(previewEl); r.collapse(false);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      }
+      document.execCommand('insertHTML', false, '<img src="' + dataUrl + '" alt="图片">');
+      saveRichRange(); syncRichToSource();
+    } else {
+      insertAtCursor('![图片](' + dataUrl + ')');
+    }
+    toast('图片已内嵌进文档（换电脑也能看到）');
+    return true;
+  }
+
+  function insertImageMarkdown(url){
+    if (activeSurface === 'rich'){
+      previewEl.focus(); restoreRichRange();
+      document.execCommand('insertHTML', false, '<img src="' + url + '" alt="图片">');
+      saveRichRange(); syncRichToSource();
+    } else {
+      insertAtCursor('![图片](' + url + ')');
+    }
+  }
+
+  function insertLinkMarkdown(text, url){
+    if (activeSurface === 'rich'){
+      previewEl.focus(); restoreRichRange();
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && !sel.isCollapsed){
+        const a = document.createElement('a');
+        a.setAttribute('href', url); a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+        try{ sel.getRangeAt(0).surroundContents(a); }
+        catch(e){ const f = sel.getRangeAt(0).extractContents(); a.appendChild(f); sel.getRangeAt(0).insertNode(a); }
+      } else {
+        document.execCommand('insertHTML', false,
+          '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(text) + '</a>');
+      }
+      saveRichRange(); syncRichToSource();
+    } else {
+      insertAtCursor('[' + text + '](' + url + ')');
+    }
+  }
+
+  /* 粘贴 */
+  editor.addEventListener('paste', ev => {
+    const dt = ev.clipboardData;
+    if (!dt) return;
+    const files = [];
+    if (dt.items){
+      for (const it of dt.items){
+        if (it.kind === 'file' && /^image\//.test(it.type)){
+          const f = it.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+    }
+    if (!files.length && dt.files){
+      for (const f of dt.files) if (/^image\//.test(f.type)) files.push(f);
+    }
+    if (files.length){
+      ev.preventDefault();
+      (async () => { for (const f of files) await insertImageFile(f); })();
+    }
+  });
+
+  /* 拖拽 */
+  const dropMask = el('dropMask');
+  let dragDepth = 0;
+  document.addEventListener('dragenter', ev => { ev.preventDefault(); });
+  document.addEventListener('dragover', ev => { ev.preventDefault(); });
+  window.addEventListener('dragenter', ev => {
+    if (ev.dataTransfer && Array.prototype.some.call(ev.dataTransfer.items || [], it => it.kind === 'file')){
+      dragDepth++; dropMask.classList.add('show');
+    }
+  });
+  window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dropMask.classList.remove('show'); });
+  window.addEventListener('drop', async ev => {
+    ev.preventDefault();
+    dragDepth = 0; dropMask.classList.remove('show');
+    const dt = ev.dataTransfer;
+    if (!dt) return;
+    const files = Array.from(dt.files || []);
+    if (!files.length) return;
+    const md = files.find(f => /\.(md|markdown|txt)$/i.test(f.name));
+    if (md && files.length === 1){
+      const text = await md.text();
+      loadContent(text, md.name, null);
+      toast('已导入 ' + md.name);
+      return;
+    }
+    let n = 0;
+    for (const f of files) if (await insertImageFile(f)) n++;
+    if (!n) toast('未识别到图片文件');
+  });
+  window.addEventListener('dragover', ev => { ev.preventDefault(); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'; });
+
+  /* =======================================================================
+   *  HTML → Markdown（右侧所见即所得内容转回源码）
+   * ===================================================================== */
+  function htmlToMarkdown(root){
+    function inline(n){
+      if (n.nodeType === 3) return n.nodeValue.replace(/\u00a0/g, ' ');
+      if (n.nodeType !== 1) return '';
+      const tag = n.tagName.toLowerCase();
+      if (tag === 'br') return '\n';
+      const inner = Array.prototype.map.call(n.childNodes, inline).join('');
+      const has = inner.trim() !== '';
+      switch (tag){
+        case 'strong': case 'b': return has ? '**' + inner + '**' : inner;
+        case 'em': case 'i': return has ? '*' + inner + '*' : inner;
+        case 'del': case 's': case 'strike': return has ? '~~' + inner + '~~' : inner;
+        case 'mark': return has ? '==' + inner + '==' : inner;
+        case 'u': return has ? '<u>' + inner + '</u>' : inner;
+        case 'code': return has ? '`' + inner.replace(/`/g, '') + '`' : inner;
+        case 'a': {
+          const href = n.getAttribute('href') || '';
+          return has ? '[' + inner + '](' + href + ')' : inner;
+        }
+        case 'img': {
+          const src = n.getAttribute('src') || '';
+          const alt = n.getAttribute('alt') || '图片';
+          return src ? '![' + alt + '](' + src + ')' : '';
+        }
+        case 'span': {
+          const m = /font-size:\s*(\d+(?:\.\d+)?)px/.exec(n.getAttribute('style') || '');
+          return (m && has) ? '<span style="font-size:' + m[1] + 'px">' + inner + '</span>' : inner;
+        }
+        case 'input': return '';
+        default: return inner;
+      }
+    }
+    function textOf(node){
+      let s = Array.prototype.map.call(node.childNodes, inline).join('');
+      s = s.replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').replace(/\n{3,}/g, '\n\n');
+      return s.replace(/^\s+|\s+$/g, '');
+    }
+    function listToMd(list, depth){
+      const ordered = list.tagName.toLowerCase() === 'ol';
+      const out = [];
+      let idx = 0;
+      Array.prototype.forEach.call(list.children, li => {
+        if (li.tagName.toLowerCase() !== 'li') return;
+        const cb = Array.prototype.find.call(li.children, c => c.tagName.toLowerCase() === 'input' && c.type === 'checkbox');
+        let text = '';
+        Array.prototype.forEach.call(li.childNodes, n => {
+          if (n.nodeType === 1){
+            const t = n.tagName.toLowerCase();
+            if (t === 'input' || t === 'ul' || t === 'ol') return;
+          }
+          text += inline(n);
+        });
+        text = text.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+        idx++;
+        const marker = cb ? ('- [' + (cb.checked ? 'x' : ' ') + '] ') : (ordered ? idx + '. ' : '- ');
+        out.push('  '.repeat(depth) + marker + text);
+        Array.prototype.forEach.call(li.children, ch => {
+          const t = ch.tagName.toLowerCase();
+          if (t === 'ul' || t === 'ol') out.push(listToMd(ch, depth + 1));
+        });
+      });
+      return out.join('\n');
+    }
+    function tableToMd(tbl){
+      const rows = Array.prototype.slice.call(tbl.querySelectorAll('tr'));
+      if (!rows.length) return '';
+      const cell = c => textOf(c).replace(/\n+/g, ' ').replace(/\|/g, '\\|');
+      const heads = Array.prototype.map.call(rows[0].children, cell);
+      const body = rows.slice(1).map(r => Array.prototype.map.call(r.children, cell));
+      const cols = heads.length; if (!cols) return '';
+      const lines = ['| ' + heads.join(' | ') + ' |', '| ' + heads.map(() => '---').join(' | ') + ' |'];
+      body.forEach(r => {
+        const cells = r.slice(0, cols);
+        while (cells.length < cols) cells.push('');
+        lines.push('| ' + cells.join(' | ') + ' |');
+      });
+      return lines.join('\n');
+    }
+    function blockToMd(node){
+      const t = node.tagName.toLowerCase();
+      if (/^h[1-6]$/.test(t)) return '#'.repeat(parseInt(t[1], 10)) + ' ' + textOf(node);
+      if (t === 'p' || t === 'div' || t === 'section' || t === 'article') return textOf(node);
+      if (t === 'hr') return '---';
+      if (t === 'blockquote'){
+        return blocksToMd(node).split('\n').map(l => l ? '> ' + l : '>').join('\n');
+      }
+      if (t === 'pre'){
+        const codeEl = node.querySelector('code');
+        const cls = codeEl ? (codeEl.className || '') : '';
+        const lang = (cls.match(/language-([\w+#.-]+)/) || [])[1] || '';
+        const code = (codeEl || node).textContent.replace(/\n$/, '');
+        return '```' + lang + '\n' + code + '\n```';
+      }
+      if (t === 'ul' || t === 'ol') return listToMd(node, 0);
+      if (t === 'table') return tableToMd(node);
+      if (t === 'img') return inline(node);
+      if (t === 'br') return '';
+      return textOf(node);
+    }
+    function blocksToMd(node){
+      const out = [];
+      Array.prototype.forEach.call(node.childNodes, n => {
+        if (n.nodeType === 3){
+          const s = n.nodeValue.replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').replace(/\s+/g, ' ').trim();
+          if (s) out.push(s);
+          return;
+        }
+        if (n.nodeType !== 1) return;
+        if (n.tagName.toLowerCase() === 'br') return;
+        const md = blockToMd(n);
+        if (md && md.replace(/\s/g, '') !== '') out.push(md);
+      });
+      return out.join('\n\n');
+    }
+    return blocksToMd(root).replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
+  }
+
+  /* =======================================================================
+   *  右侧所见即所得编辑区
+   * ===================================================================== */
+  let activeSurface = 'source';
+  let richRange = null;
+  function saveRichRange(){
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    if (previewEl.contains(r.startContainer)) richRange = r.cloneRange();
+  }
+  function restoreRichRange(){
+    if (!richRange) return false;
+    try{
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(richRange);
+      return true;
+    }catch(e){ return false; }
+  }
+  function hasRichSel(){
+    const sel = window.getSelection();
+    return !!(sel && sel.rangeCount && !sel.isCollapsed &&
+      previewEl.contains(sel.getRangeAt(0).startContainer));
+  }
+  function unwrapNode(node){
+    const p = node.parentNode; if (!p) return;
+    while (node.firstChild) p.insertBefore(node.firstChild, node);
+    p.removeChild(node);
+  }
+  function richWrap(tag){
+    if (!hasRichSel()){ toast('请先在右侧文档中选中文字'); return; }
+    const sel = window.getSelection(), range = sel.getRangeAt(0);
+    const node = document.createElement(tag);
+    try{ range.surroundContents(node); }
+    catch(e){ node.appendChild(range.extractContents()); range.insertNode(node); }
+    const r2 = document.createRange();
+    r2.selectNodeContents(node);
+    sel.removeAllRanges(); sel.addRange(r2);
+  }
+  function applyRichFontSize(px){
+    if (!hasRichSel()){ toast('请先选中文字再调整字号'); return; }
+    const sel = window.getSelection(), range = sel.getRangeAt(0);
+    const sp = document.createElement('span');
+    sp.setAttribute('style', 'font-size:' + px + 'px');
+    try{ range.surroundContents(sp); }
+    catch(e){ sp.appendChild(range.extractContents()); range.insertNode(sp); }
+    let cur = sp.parentNode, guard = 0;
+    while (cur && cur !== previewEl && guard++ < 30){
+      const nx = cur.parentNode;
+      if (cur.tagName === 'SPAN' && /font-size/.test(cur.getAttribute('style') || '')){
+        unwrapNode(cur);
+      }
+      cur = nx;
+    }
+    const r2 = document.createRange();
+    r2.selectNodeContents(sp);
+    sel.removeAllRanges(); sel.addRange(r2);
+  }
+  function richClearFontSize(){
+    if (!hasRichSel()){ toast('请先选中文字'); return; }
+    const range = window.getSelection().getRangeAt(0);
+    Array.prototype.forEach.call(previewEl.querySelectorAll('span'), sp => {
+      if (!/font-size/.test(sp.getAttribute('style') || '')) return;
+      if (!range.intersectsNode(sp)) return;
+      sp.removeAttribute('style');
+      unwrapNode(sp);
+    });
+    saveRichRange(); syncRichToSource();
+  }
+  function richClear(){
+    if (!hasRichSel()){ toast('请先选中要清除格式的文字'); return; }
+    const range = window.getSelection().getRangeAt(0);
+    Array.prototype.forEach.call(previewEl.querySelectorAll('span'), sp => {
+      if (/font-size/.test(sp.getAttribute('style') || '') && range.intersectsNode(sp)) unwrapNode(sp);
+    });
+    document.execCommand('removeFormat');
+    saveRichRange(); syncRichToSource();
+    toast('已清除选中文字的行内格式');
+  }
+  function richTask(){
+    document.execCommand('insertUnorderedList');
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    let n = sel.getRangeAt(0).startContainer;
+    if (n.nodeType === 3) n = n.parentNode;
+    const li = n.closest ? n.closest('li') : null;
+    if (li && !li.querySelector('input[type=checkbox]')){
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.disabled = true;
+      li.insertBefore(cb, li.firstChild);
+      li.insertBefore(document.createTextNode(' '), cb.nextSibling);
+    }
+  }
+  function richCodeBlock(){
+    const sel = window.getSelection();
+    const text = (sel && sel.rangeCount && !sel.isCollapsed) ? sel.toString() : '';
+    document.execCommand('insertHTML', false,
+      '<pre><code>' + escapeHtml(text || '在此输入代码') + '</code></pre><p><br></p>');
+  }
+  function richTable(rows, cols){
+    rows = clamp(rows, 2, 30); cols = clamp(cols, 1, 10);
+    let html = '<table><thead><tr>';
+    for (let k = 0; k < cols; k++) html += '<th>表头' + (k + 1) + '</th>';
+    html += '</tr></thead><tbody>';
+    for (let r = 0; r < rows - 1; r++){
+      html += '<tr>';
+      for (let k = 0; k < cols; k++) html += '<td>内容' + (r + 1) + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table><p><br></p>';
+    document.execCommand('insertHTML', false, html);
+  }
+  function execRich(cmd){
+    const richCmds = {
+      bold: 1, italic: 1, underline: 1, strike: 1, mark: 1, code: 1,
+      h1: 1, h2: 1, h3: 1, paragraph: 1, ul: 1, ol: 1, quote: 1, task: 1,
+      codeblock: 1, hr: 1, fontUp: 1, fontDn: 1, link: 1, image: 1, table: 1, clear: 1
+    };
+    if (!richCmds[cmd]) return false;
+    previewEl.focus();
+    restoreRichRange();
+    switch (cmd){
+      case 'bold': document.execCommand('bold'); break;
+      case 'italic': document.execCommand('italic'); break;
+      case 'underline': document.execCommand('underline'); break;
+      case 'strike': document.execCommand('strikeThrough'); break;
+      case 'mark': richWrap('mark'); break;
+      case 'code': richWrap('code'); break;
+      case 'h1': document.execCommand('formatBlock', false, 'h1'); break;
+      case 'h2': document.execCommand('formatBlock', false, 'h2'); break;
+      case 'h3': document.execCommand('formatBlock', false, 'h3'); break;
+      case 'paragraph': document.execCommand('formatBlock', false, 'p'); break;
+      case 'ul': document.execCommand('insertUnorderedList'); break;
+      case 'ol': document.execCommand('insertOrderedList'); break;
+      case 'quote': document.execCommand('formatBlock', false, 'blockquote'); break;
+      case 'task': richTask(); break;
+      case 'codeblock': richCodeBlock(); break;
+      case 'hr': document.execCommand('insertHorizontalRule'); break;
+      case 'fontUp': {
+        if (!hasRichSel()){ toast('请先选中文字再调整字号'); return true; }
+        const n0 = window.getSelection().getRangeAt(0).startContainer;
+        const el0 = n0.nodeType === 3 ? n0.parentNode : n0;
+        const host = el0.closest ? el0.closest('span[style*="font-size"]') : null;
+        const m = host ? /font-size:\s*(\d+(?:\.\d+)?)px/.exec(host.getAttribute('style') || '') : null;
+        applyRichFontSize(clamp(Math.round((m ? parseFloat(m[1]) : 16) + 2), 10, 72));
+        break;
+      }
+      case 'fontDn': {
+        if (!hasRichSel()){ toast('请先选中文字再调整字号'); return true; }
+        const n0 = window.getSelection().getRangeAt(0).startContainer;
+        const el0 = n0.nodeType === 3 ? n0.parentNode : n0;
+        const host = el0.closest ? el0.closest('span[style*="font-size"]') : null;
+        const m = host ? /font-size:\s*(\d+(?:\.\d+)?)px/.exec(host.getAttribute('style') || '') : null;
+        applyRichFontSize(clamp(Math.round((m ? parseFloat(m[1]) : 16) - 2), 10, 72));
+        break;
+      }
+      case 'link': openLinkDialog(); return true;
+      case 'image': openImageDialog(); return true;
+      case 'table': openTableDialog(); return true;
+      case 'clear': richClear(); return true;
+    }
+    saveRichRange();
+    syncRichToSource();
+    return true;
+  }
+
+  /* 右侧粘贴图片 → 直接内嵌 */
+  previewEl.addEventListener('paste', ev => {
+    const dt = ev.clipboardData;
+    if (!dt) return;
+    const files = [];
+    if (dt.items){
+      for (const it of dt.items){
+        if (it.kind === 'file' && /^image\//.test(it.type)){
+          const f = it.getAsFile(); if (f) files.push(f);
+        }
+      }
+    }
+    if (!files.length && dt.files){
+      for (const f of dt.files) if (/^image\//.test(f.type)) files.push(f);
+    }
+    if (!files.length) return;
+    ev.preventDefault();
+    saveRichRange();
+    (async () => {
+      for (const f of files) await insertImageFile(f);
+    })();
+  });
+
+  previewEl.addEventListener('focus', () => { activeSurface = 'rich'; });
+  previewEl.addEventListener('mouseup', saveRichRange);
+  previewEl.addEventListener('keyup', saveRichRange);
+  previewEl.addEventListener('blur', saveRichRange);
+  previewEl.addEventListener('input', () => { syncRichToSource(); saveRichRange(); });
+  editor.addEventListener('focus', () => { activeSurface = 'source'; });
+  previewEl.addEventListener('click', ev => {
+    const a = ev.target.closest && ev.target.closest('a[href]');
+    if (a && ev.ctrlKey){
+      ev.preventDefault();
+      hostNotify({ type: 'openUrl', url: a.getAttribute('href') });
+    }
+  });
+
+  /* =======================================================================
+   *  文件操作（桌面版走宿主桥接；浏览器打开时回退到 File System Access）
+   * ===================================================================== */
+  function loadContent(text, name, path){
+    editor.value = text == null ? '' : text;
+    state.fileName = name || '未命名.md';
+    state.filePath = path || null;
+    state.dirty = false;
+    resetHistory();
+    syncing = true; renderNow(); syncing = false;
+    updateTitle();
+    updateStatus();
+    el('stFile').textContent = path ? '已打开：' + state.fileName
+      : (name && name !== '未命名.md' ? '已导入（尚未保存到磁盘）' : '未保存');
+  }
+
+  function newFile(){
+    if (state.dirty && !confirm('当前文档尚未保存，确定要新建吗？')) return;
+    loadContent('', '未命名.md', null);
+    el('stFile').textContent = '未保存';
+  }
+
+  const SUPPORT_FS = typeof window.showOpenFilePicker === 'function';
+
+  async function openFile(){
+    if (state.dirty && !confirm('当前文档尚未保存，确定要打开其他文件吗？')) return;
+    if (HOST){
+      const r = await hostCall('open');
+      if (r && r.type === 'opened') loadContent(r.text, r.name, r.path);
+      else if (r && r.type === 'error') toast(r.message || '打开失败');
+      return;
+    }
+    if (SUPPORT_FS){
+      try{
+        const [h] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [{ description: 'Markdown 文档', accept: { 'text/markdown': ['.md', '.markdown'], 'text/plain': ['.txt'] } }]
+        });
+        const f = await h.getFile();
+        loadContent(await f.text(), f.name, null);
+      }catch(err){
+        if (err && err.name === 'AbortError') return;
+        console.warn(err); toast('打开失败，已切换为普通选择方式');
+        el('filePicker').click();
+      }
+    } else {
+      el('filePicker').click();
+    }
+  }
+  el('filePicker').addEventListener('change', async ev => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = '';
+    if (!f) return;
+    loadContent(await f.text(), f.name, null);
+  });
+
+  async function saveFile(saveAs){
+    if (HOST){
+      const r = await hostCall('save', {
+        text: editor.value,
+        path: saveAs ? '' : (state.filePath || ''),
+        forceDialog: !!saveAs
+      });
+      if (r && r.type === 'saved'){
+        state.filePath = r.path; state.fileName = r.name;
+        state.dirty = false; updateTitle();
+        el('stFile').textContent = '已保存：' + r.path;
+        toast('已保存到 ' + r.name);
+      } else if (r && r.type === 'error'){
+        toast(r.message || '保存失败');
+      }
+      return;
+    }
+    if (SUPPORT_FS){
+      try{
+        let h = state.fileHandle;
+        if (!h || saveAs){
+          h = await window.showSaveFilePicker({
+            suggestedName: state.fileName || '未命名.md',
+            types: [{ description: 'Markdown 文档', accept: { 'text/markdown': ['.md'] } }]
+          });
+          state.fileHandle = h;
+          state.fileName = h.name;
+        }
+        const w = await h.createWritable();
+        await w.write(editor.value);
+        await w.close();
+        state.dirty = false;
+        updateTitle(); updateStatus();
+        el('stFile').textContent = '已保存：' + state.fileName;
+        toast('已保存到 ' + state.fileName);
+        return;
+      }catch(err){
+        if (err && err.name === 'AbortError') return;
+        console.warn(err); toast('保存失败，已切换为下载方式');
+      }
+    }
+    downloadFile();
+  }
+
+  function downloadFile(){
+    const blob = new Blob([editor.value], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = state.fileName || '未命名.md';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    state.dirty = false;
+    updateTitle();
+    el('stFile').textContent = '已下载：' + a.download;
+    toast('已下载 ' + a.download);
+  }
+
+  /* 把本程序注册成 .md 的打开方式（Windows 桌面版） */
+  async function associate(){
+    if (!HOST){ toast('“关联 .md 文件”仅在桌面版可用'); return; }
+    const r = await hostCall('associate');
+    if (!r || r.type !== 'associated'){ toast('关联设置失败'); return; }
+    openModal('设为 .md 文件的打开方式',
+      '<p style="margin:0 0 10px">已把本程序注册为 Markdown 文档的打开方式（只写当前用户，无需管理员权限）。</p>' +
+      '<p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">系统马上会弹出「打开方式」窗口，请按下面三步操作：</p>' +
+      '<ol style="margin:0 0 12px;padding-left:1.5em;line-height:2">' +
+      '<li>在列表中选择 <b>Markdown 编辑器</b>；若没看到，点「更多应用」→ 拉到底「在这台电脑上查找其他应用」，选 <code>' + escapeHtml(r.exe || '') + '</code>；</li>' +
+      '<li>勾选 <b>「始终使用此应用打开 .md 文件」</b>；</li>' +
+      '<li>点「确定」。以后双击任意 .md 就直接用本程序打开。</li>' +
+      '</ol>' +
+      '<div class="modal-actions"><button class="btn" id="dlgAgain">再弹一次对话框</button>' +
+      '<button class="btn primary" id="dlgCancel">知道了</button></div>',
+      m => {
+        m.querySelector('#dlgCancel').onclick = closeModal;
+        m.querySelector('#dlgAgain').onclick = () => hostCall('openWithDialog');
+      });
+  }
+
+  /* 草稿自动保存 */
+  const DRAFT_KEY = 'md-editor-draft-v1';
+  function autosaveDraft(){
+    try{
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        name: state.fileName, text: editor.value, at: Date.now()
+      }));
+    }catch(e){ /* 超限则忽略 */ }
+  }
+  function restoreDraft(){
+    try{
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      if (d && d.text && d.text.trim()){
+        loadContent(d.text, d.name || '未命名.md', null);
+        state.dirty = true;
+        updateTitle();
+        el('stFile').textContent = '已恢复上次未保存的草稿';
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+
+  /* =======================================================================
+   *  工具栏构建
+   * ===================================================================== */
+  const svg = inner => '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  const I = {
+    file:   svg('<path d="M4 1.6h5l3 3v9.8H4z"/><path d="M9 1.6v3h3"/>'),
+    folder: svg('<path d="M1.6 3.4h4l1.4 2h7.4v8h-12.8z"/>'),
+    save:   svg('<path d="M2.6 2.6h8.4l2.4 2.4v8.4H2.6z"/><path d="M5 2.6v4h6v-4"/><path d="M5 13.4v-4h6v4"/>'),
+    saveAs: svg('<path d="M2.6 2.6h6.4l2.4 2.4v3"/><path d="M2.6 2.6v11h5"/><path d="M8.5 11.8h6"/><path d="M12 9.4l2.6 2.4-2.6 2.4"/>'),
+    undo:   svg('<path d="M5.6 4.6 2.6 7.4l3 2.8"/><path d="M2.6 7.4h6.9a3.6 3.6 0 0 1 0 7.2H7"/>'),
+    redo:   svg('<path d="M10.4 4.6l3 2.8-3 2.8"/><path d="M13.4 7.4H6.5a3.6 3.6 0 0 0 0 7.2H9"/>'),
+    fontUp: svg('<path d="M2.5 13.5 6.2 2.8l3.7 10.7"/><path d="M3.9 9.8h4.6"/><path d="M12 4.5v5"/><path d="M9.8 6.7h4.4"/>'),
+    fontDn: svg('<path d="M2.5 13.5 6.2 2.8l3.7 10.7"/><path d="M3.9 9.8h4.6"/><path d="M9.8 6.7h4.4"/>'),
+    link:   svg('<path d="M6.6 9.4 9.4 6.6"/><path d="M7 5.6 8.6 4a2.7 2.7 0 0 1 3.8 3.8L10.8 9.4"/><path d="M9 10.4 7.4 12a2.7 2.7 0 0 1-3.8-3.8L5.2 6.6"/>'),
+    image:  svg('<rect x="2" y="3" width="12" height="10" rx="1.6"/><circle cx="5.9" cy="6.4" r="1.1"/><path d="M3 11.6 6.6 8l3 3 1.8-1.7 1.9 1.9"/>'),
+    table:  svg('<rect x="2" y="3" width="12" height="10" rx="1.4"/><path d="M2 6.6h12M2 10h12M6.6 3v10M10.4 3v10"/>'),
+    hr:     svg('<path d="M2 8h12"/><path d="M4.2 3.9h7.6" opacity=".4"/><path d="M4.2 12.1h7.6" opacity=".4"/>'),
+    split:  svg('<rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6"/><path d="M8 2.6v10.8"/>'),
+    edit:   svg('<rect x="2.4" y="2.6" width="11.2" height="10.8" rx="1.6"/><path d="M4.6 5.8h6.8M4.6 8.2h6.8M4.6 10.6h4.4"/>'),
+    eye:    svg('<path d="M1.6 8S4.2 3.8 8 3.8 14.4 8 14.4 8 11.8 12.2 8 12.2 1.6 8 1.6 8z"/><circle cx="8" cy="8" r="1.9"/>'),
+    sun:    svg('<circle cx="8" cy="8" r="3"/><path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3"/>'),
+    moon:   svg('<path d="M13.2 10.3A5.7 5.7 0 0 1 5.7 2.8a5.9 5.9 0 1 0 7.5 7.5z"/>'),
+    help:   svg('<circle cx="8" cy="8" r="6.3"/><path d="M6.3 6.2a1.8 1.8 0 1 1 2.4 1.9c-.5.2-.7.5-.7 1v.4"/><circle cx="8" cy="11.7" r=".85" fill="currentColor" stroke="none"/>')
+  };
+
+  const TOOLBAR = [
+    { items: [
+      { cmd: 'new', title: '新建 (Ctrl+N)', icon: I.file },
+      { cmd: 'open', title: '打开 .md 文件 (Ctrl+O)', icon: I.folder },
+      { cmd: 'save', title: '保存 (Ctrl+S)', icon: I.save },
+      { cmd: 'saveAs', title: '另存为…', icon: I.saveAs }
+    ]},
+    { items: [
+      { cmd: 'undo', title: '撤销 (Ctrl+Z)', icon: I.undo },
+      { cmd: 'redo', title: '重做 (Ctrl+Y)', icon: I.redo }
+    ]},
+    { items: [
+      { cmd: 'h1', title: '一级标题', text: 'H1' },
+      { cmd: 'h2', title: '二级标题', text: 'H2' },
+      { cmd: 'h3', title: '三级标题', text: 'H3' },
+      { cmd: 'paragraph', title: '正文（清除标题样式）', icon: I.edit }
+    ]},
+    { items: [
+      { cmd: 'fontUp', title: '增大字号', icon: I.fontUp },
+      { cmd: 'fontDn', title: '减小字号', icon: I.fontDn },
+      { raw: '<select class="tb-select" id="fontSize" title="设置选中文字的字号">' +
+              '<option value="">字号</option>' +
+              '<option value="12">12</option><option value="14">14</option>' +
+              '<option value="16">16</option><option value="18">18</option>' +
+              '<option value="20">20</option><option value="24">24</option>' +
+              '<option value="28">28</option><option value="32">32</option>' +
+              '<option value="40">40</option><option value="48">48</option>' +
+              '<option value="clear">清除字号</option></select>' }
+    ]},
+    { items: [
+      { cmd: 'bold', title: '加粗 (Ctrl+B)', text: 'B', style: 'font-weight:800' },
+      { cmd: 'italic', title: '斜体 (Ctrl+I)', text: 'I', style: 'font-style:italic;font-family:Georgia,serif' },
+      { cmd: 'underline', title: '下划线 (Ctrl+U)', text: 'U', style: 'text-decoration:underline' },
+      { cmd: 'strike', title: '删除线', text: 'S', style: 'text-decoration:line-through' },
+      { cmd: 'mark', title: '高亮 ==文字==', text: '高亮', style: 'background:#ffe58f;color:#1f2329;border-radius:4px' },
+      { cmd: 'code', title: '行内代码 (Ctrl+`)', text: '</>' }
+    ]},
+    { items: [
+      { cmd: 'ul', title: '无序列表', text: '• 列表' },
+      { cmd: 'ol', title: '有序列表', text: '1. 列表' },
+      { cmd: 'task', title: '任务清单', text: '☑ 待办' },
+      { cmd: 'quote', title: '引用', text: '❝' }
+    ]},
+    { items: [
+      { cmd: 'codeblock', title: '代码块', text: '{ }' },
+      { cmd: 'link', title: '插入链接 (Ctrl+K)', icon: I.link },
+      { cmd: 'image', title: '插入图片 / 粘贴图片', icon: I.image },
+      { cmd: 'table', title: '插入表格', icon: I.table },
+      { cmd: 'hr', title: '分割线', icon: I.hr },
+      { cmd: 'clear', title: '清除选中文字的格式', text: 'Tx' }
+    ]}
+  ];
+
+  function buildToolbar(){
+    const bar = el('toolbar');
+    const html = TOOLBAR.map(g =>
+      '<div class="tb-group" style="display:flex;align-items:center;gap:2px">' +
+      g.items.map(it => {
+        if (it.raw) return it.raw;
+        const inner = it.icon || '<span class="big" style="' + (it.style || '') + '">' + it.text + '</span>';
+        return '<button class="tb-btn" data-cmd="' + it.cmd + '" title="' + it.title + '">' + inner + '</button>';
+      }).join('') +
+      '</div>').join('<div class="tb-sep"></div>');
+    bar.innerHTML = html + '<div class="tb-sep"></div><div style="display:flex;align-items:center;gap:2px;margin-left:auto" id="viewGroup"></div>';
+
+    el('viewGroup').innerHTML =
+      '<button class="tb-btn" data-cmd="toggleSrc" title="收起 / 展开左侧 Markdown 源码面板">' + I.split + '</button>' +
+      '<button class="tb-btn" data-cmd="associate" title="把本程序设为 .md 文件的打开方式，之后双击 .md 直接用本程序打开">' +
+        '<span class="big" style="font-size:12px">关联 .md</span></button>' +
+      '<div class="tb-sep"></div>' +
+      '<button class="tb-btn" data-cmd="theme" title="切换深色 / 浅色主题">' + I.moon + '</button>' +
+      '<button class="tb-btn" data-cmd="help" title="快捷键与使用帮助">' + I.help + '</button>';
+
+    el('tbRight').innerHTML =
+      '<button class="tb-btn" data-cmd="toggleSrc" title="收起 / 展开源码面板">' + I.split + '</button>' +
+      '<button class="tb-btn" data-cmd="theme" title="切换主题">' + I.moon + '</button>' +
+      '<button class="tb-btn" data-cmd="help" title="帮助">' + I.help + '</button>';
+  }
+
+  function setSrcCollapsed(c){
+    state.srcCollapsed = !!c;
+    el('paneEditor').classList.toggle('hidden', state.srcCollapsed);
+    el('splitter').classList.toggle('hidden', state.srcCollapsed);
+    el('srcRail').classList.toggle('hidden', !state.srcCollapsed);
+    document.querySelectorAll('[data-cmd="toggleSrc"]').forEach(b => b.classList.toggle('active', state.srcCollapsed));
+    if (state.srcCollapsed) renderFromSource();
+  }
+  function toggleSrc(){ setSrcCollapsed(!state.srcCollapsed); }
+  function toggleTheme(){
+    state.theme = state.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', state.theme);
+    const btn = document.querySelectorAll('[data-cmd="theme"]');
+    btn.forEach(b => { b.innerHTML = state.theme === 'dark' ? I.sun : I.moon; });
+  }
+
+  /* =======================================================================
+   *  命令分发
+   * ===================================================================== */
+  function exec(cmd){
+    const GLOBAL_CMDS = { new: 1, open: 1, save: 1, saveAs: 1, undo: 1, redo: 1,
+      theme: 1, help: 1, toggleSrc: 1, associate: 1 };
+    if (activeSurface === 'rich' && !GLOBAL_CMDS[cmd] && execRich(cmd)) return;
+    switch (cmd){
+      case 'new': newFile(); break;
+      case 'open': openFile(); break;
+      case 'save': saveFile(false); break;
+      case 'saveAs': saveFile(true); break;
+      case 'undo': undo(); break;
+      case 'redo': redo(); break;
+      case 'h1': applyLinePrefix('# ', { replaceHeading: true }); break;
+      case 'h2': applyLinePrefix('## ', { replaceHeading: true }); break;
+      case 'h3': applyLinePrefix('### ', { replaceHeading: true }); break;
+      case 'paragraph': stripHeadingPrefix(); break;
+      case 'fontUp': bumpFont(2); break;
+      case 'fontDn': bumpFont(-2); break;
+      case 'bold': wrapSelection('**', '**', '粗体文本'); break;
+      case 'italic': wrapSelection('*', '*', '斜体文本'); break;
+      case 'underline': wrapSelection('<u>', '</u>'); break;
+      case 'strike': wrapSelection('~~', '~~', '删除文本'); break;
+      case 'mark': wrapSelection('==', '==', '高亮文本'); break;
+      case 'code': wrapSelection('`', '`', 'code'); break;
+      case 'codeblock': insertCodeBlock(); break;
+      case 'ul': applyLinePrefix('- ', { stripOtherPrefix: true }); break;
+      case 'ol': applyLinePrefix('1. ', { stripOtherPrefix: true }); break;
+      case 'task': applyLinePrefix('- [ ] ', { stripOtherPrefix: true }); break;
+      case 'quote': applyLinePrefix('> '); break;
+      case 'link': openLinkDialog(); break;
+      case 'image': openImageDialog(); break;
+      case 'table': openTableDialog(); break;
+      case 'hr': insertAtCursor('---'); break;
+      case 'clear': clearFormat(); break;
+      case 'toggleSrc': toggleSrc(); break;
+      case 'associate': associate(); break;
+      case 'theme': toggleTheme(); break;
+      case 'help': openHelp(); break;
+    }
+  }
+
+  function stripHeadingPrefix(){
+    const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+    const start = v.lastIndexOf('\n', s - 1) + 1;
+    let end = v.indexOf('\n', e); if (end < 0) end = v.length;
+    const out = v.slice(start, end).split('\n').map(l => l.replace(/^\s*#{1,6}\s+/, '')).join('\n');
+    setValue(v.slice(0, start) + out + v.slice(end), start, start + out.length);
+  }
+
+  function clearFormat(){
+    const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+    const sel = v.slice(s, e);
+    if (!sel){ toast('请先选中要清除格式的文字'); return; }
+    const cleaned = sel
+      .replace(/<span style="font-size:\s*\d+(?:\.\d+)?px">/g, '').replace(/<br\s*\/?>/gi, '')
+      .replace(/<\/?(span|u|mark)>/gi, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1').replace(/(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)/g, '$1')
+      .replace(/~~(.*?)~~/g, '$1').replace(/==(.*?)==/g, '$1').replace(/`(.*?)`/g, '$1');
+    setValue(v.slice(0, s) + cleaned + v.slice(e), s, s + cleaned.length);
+    toast('已清除选中文字的行内格式');
+  }
+
+  /* =======================================================================
+   *  弹窗
+   * ===================================================================== */
+  const mask = el('mask'), modal = el('modal');
+  function openModal(title, bodyHtml, onMount){
+    mask.style.display = 'flex';
+    modal.innerHTML =
+      '<div class="modal-head"><span>' + title + '</span><button class="modal-close" id="modalClose">×</button></div>' +
+      '<div class="modal-body">' + bodyHtml + '</div>';
+    el('modalClose').onclick = closeModal;
+    mask.onclick = ev => { if (ev.target === mask) closeModal(); };
+    if (onMount) onMount(modal);
+  }
+  function closeModal(){ mask.style.display = 'none'; modal.innerHTML = ''; }
+
+  function openLinkDialog(){
+    const v = editor.value, sel = v.slice(editor.selectionStart, editor.selectionEnd);
+    openModal('插入链接',
+      '<div class="field"><label>链接文字</label><input type="text" id="dlgText" value="' + escapeHtml(sel || '链接文字').replace(/"/g, '&quot;') + '"></div>' +
+      '<div class="field"><label>链接地址</label><input type="text" id="dlgUrl" placeholder="https://example.com"></div>' +
+      '<div class="modal-actions"><button class="btn" id="dlgCancel">取消</button><button class="btn primary" id="dlgOk">插入</button></div>',
+      m => {
+        m.querySelector('#dlgCancel').onclick = closeModal;
+        m.querySelector('#dlgUrl').focus();
+        const go = () => {
+          const t = m.querySelector('#dlgText').value.trim() || '链接文字';
+          const u = m.querySelector('#dlgUrl').value.trim() || 'https://';
+          closeModal();
+          insertLinkMarkdown(t, u);
+        };
+        m.querySelector('#dlgOk').onclick = go;
+        m.querySelector('#dlgUrl').addEventListener('keydown', ev => { if (ev.key === 'Enter') go(); });
+      });
+  }
+
+  function openImageDialog(){
+    openModal('插入图片',
+      '<p style="margin:0 0 12px;color:var(--muted);font-size:12.5px">推荐直接在编辑区按 <b>Ctrl+V</b> 粘贴截图，或把图片拖进来，图片会以 base64 内嵌进 .md 文件。</p>' +
+      '<div class="field"><label>图片网址</label><input type="text" id="dlgImgUrl" placeholder="https://example.com/a.png"></div>' +
+      '<div class="modal-actions"><button class="btn" id="dlgCancel">取消</button>' +
+      '<button class="btn" id="dlgPickFile">选择本地图片…</button>' +
+      '<button class="btn primary" id="dlgOk">插入网址</button></div>',
+      m => {
+        m.querySelector('#dlgCancel').onclick = closeModal;
+        m.querySelector('#dlgImgUrl').focus();
+        m.querySelector('#dlgPickFile').onclick = () => { closeModal(); el('imgPicker').click(); };
+        const go = () => {
+          const u = m.querySelector('#dlgImgUrl').value.trim();
+          if (!u){ toast('请输入图片网址'); return; }
+          closeModal();
+          insertImageMarkdown(u);
+        };
+        m.querySelector('#dlgOk').onclick = go;
+        m.querySelector('#dlgImgUrl').addEventListener('keydown', ev => { if (ev.key === 'Enter') go(); });
+      });
+  }
+
+  el('imgPicker').addEventListener('change', async ev => {
+    const files = Array.from(ev.target.files || []);
+    ev.target.value = '';
+    for (const f of files) await insertImageFile(f);
+  });
+
+  function openTableDialog(){
+    openModal('插入表格',
+      '<div class="field"><label>行数</label><input type="number" id="dlgRows" value="3" min="2" max="30"></div>' +
+      '<div class="field"><label>列数</label><input type="number" id="dlgCols" value="3" min="1" max="10"></div>' +
+      '<div class="modal-actions"><button class="btn" id="dlgCancel">取消</button><button class="btn primary" id="dlgOk">插入</button></div>',
+      m => {
+        m.querySelector('#dlgCancel').onclick = closeModal;
+        const go = () => {
+          const r = parseInt(m.querySelector('#dlgRows').value, 10) || 3;
+          const c = parseInt(m.querySelector('#dlgCols').value, 10) || 3;
+          closeModal();
+          insertTable(r, c);
+        };
+        m.querySelector('#dlgOk').onclick = go;
+        m.querySelector('#dlgRows').addEventListener('keydown', ev => { if (ev.key === 'Enter') go(); });
+        m.querySelector('#dlgCols').addEventListener('keydown', ev => { if (ev.key === 'Enter') go(); });
+      });
+  }
+
+  function openHelp(){
+    const rows = [
+      ['Ctrl + V', '粘贴截图 / 图片，自动以 base64 内嵌进 .md'],
+      ['拖拽图片', '把图片文件拖到窗口任意位置即可插入'],
+      ['Ctrl + B / I / U', '加粗 / 斜体 / 下划线'],
+      ['Ctrl + K', '插入链接'],
+      ['Ctrl + Z / Ctrl + Y', '撤销 / 重做'],
+      ['Ctrl + S', '保存（首次会弹出选择保存位置）'],
+      ['Ctrl + O / Ctrl + N', '打开文件 / 新建文档'],
+      ['Tab / Shift + Tab', '缩进 / 取消缩进'],
+      ['Enter', '在列表末尾回车自动续写下一项'],
+      ['Ctrl + 1 / 2 / 3', '一级 / 二级 / 三级标题']
+    ];
+    openModal('使用帮助与快捷键',
+      '<div style="margin-bottom:12px;color:var(--muted);font-size:12.5px">图片内嵌说明：粘贴的图片会写成 ' +
+      '<code>![图片](data:image/png;base64,…)</code>，图片数据保存在 .md 文件内部，' +
+      '复制到任何电脑、任何 Markdown 阅读器都能直接打开看到图片。</div>' +
+      '<div style="margin-bottom:12px;color:var(--muted);font-size:12.5px">双栏说明：左侧是 Markdown 源码，' +
+      '点右上角「' + '» 收起源码' + '」按钮或工具栏的分栏按钮即可收起，收起后文档区全宽；' +
+      '右侧文档区可以直接编辑——选中文字后点工具栏就能加粗、改字号、设标题等。</div>' +
+      '<div class="kbd-list">' + rows.map(r => '<b>' + r[0] + '</b><span>' + r[1] + '</span>').join('') + '</div>' +
+      '<div class="modal-actions"><button class="btn primary" id="dlgCancel">知道了</button></div>',
+      m => { m.querySelector('#dlgCancel').onclick = closeModal; });
+  }
+
+  /* =======================================================================
+   *  事件绑定
+   * ===================================================================== */
+  document.addEventListener('click', ev => {
+    const btn = ev.target.closest('[data-cmd]');
+    if (!btn) return;
+    exec(btn.dataset.cmd);
+  });
+
+  document.addEventListener('change', ev => {
+    if (ev.target.id === 'fontSize'){
+      const v = ev.target.value;
+      ev.target.value = '';
+      if (!v) return;
+      if (activeSurface === 'rich'){
+        if (v === 'clear') richClearFontSize();
+        else { previewEl.focus(); restoreRichRange(); applyRichFontSize(parseFloat(v)); saveRichRange(); syncRichToSource(); }
+      } else {
+        setFontSize(v);
+      }
+    }
+    if (ev.target.id === 'syncToggle'){ state.syncScroll = ev.target.checked; }
+  });
+
+  /* 工具栏/侧栏按钮点击时不要抢走右侧编辑区的焦点 */
+  document.addEventListener('mousedown', ev => {
+    const b = ev.target.closest && ev.target.closest('.toolbar .tb-btn, .pane-mini, .rail');
+    if (b && activeSurface === 'rich') ev.preventDefault();
+  });
+
+  /* 收起 / 展开源码面板 */
+  el('collapseSrc').addEventListener('click', () => setSrcCollapsed(true));
+  el('srcRail').addEventListener('click', () => setSrcCollapsed(false));
+
+  editor.addEventListener('input', () => {
+    if (syncing) return;
+    onContentChanged(false, true);
+    renderFromSource();
+    commitHistoryDebounced();
+  });
+  editor.addEventListener('keyup', updateStatus);
+  editor.addEventListener('mousedown', updateStatus);
+  editor.addEventListener('click', updateStatus);
+  editor.addEventListener('scroll', syncScrollToPreview);
+
+  function syncScrollToPreview(){
+    if (!state.syncScroll || state.srcCollapsed) return;
+    const a = editor, b = previewScroll;
+    const ar = a.scrollHeight - a.clientHeight;
+    const br = b.scrollHeight - b.clientHeight;
+    if (ar <= 0 || br <= 0) return;
+    b.scrollTop = (a.scrollTop / ar) * br;
+  }
+  previewScroll.addEventListener('scroll', () => {
+    if (!state.syncScroll || state.srcCollapsed) return;
+    const a = previewScroll, b = editor;
+    const ar = a.scrollHeight - a.clientHeight;
+    const br = b.scrollHeight - b.clientHeight;
+    if (ar <= 0 || br <= 0) return;
+    b.scrollTop = (a.scrollTop / ar) * br;
+  });
+
+  /* 全局快捷键（焦点在右侧文档区时也生效） */
+  document.addEventListener('keydown', ev => {
+    if (ev.defaultPrevented) return;
+    const ctrl = ev.ctrlKey || ev.metaKey;
+    if (!ctrl || ev.altKey) return;
+    const k = (ev.key || '').toLowerCase();
+    if (k === 's'){ ev.preventDefault(); saveFile(false); }
+    else if (k === 'o'){ ev.preventDefault(); openFile(); }
+    else if (k === 'n'){ ev.preventDefault(); newFile(); }
+  });
+
+  /* 快捷键 */
+  editor.addEventListener('keydown', ev => {
+    const ctrl = ev.ctrlKey || ev.metaKey;
+    const k = ev.key;
+
+    if (ev.key === 'Tab'){
+      ev.preventDefault();
+      const v = editor.value, s = editor.selectionStart, e = editor.selectionEnd;
+      if (s !== e && v.slice(s, e).includes('\n')){
+        const start = v.lastIndexOf('\n', s - 1) + 1;
+        let end = v.indexOf('\n', e); if (end < 0) end = v.length;
+        const lines = v.slice(start, end).split('\n');
+        const out = lines.map(l => ev.shiftKey ? l.replace(/^ {1,2}/, '') : '  ' + l).join('\n');
+        setValue(v.slice(0, start) + out + v.slice(end), start, start + out.length);
+      } else if (ev.shiftKey){
+        const start = v.lastIndexOf('\n', s - 1) + 1;
+        const line = v.slice(start, v.indexOf('\n', s) < 0 ? v.length : v.indexOf('\n', s));
+        const out = line.replace(/^ {1,2}/, '');
+        if (out !== line){
+          setValue(v.slice(0, start) + out + v.slice(start + line.length),
+            Math.max(start, s - (line.length - out.length)), undefined);
+        }
+      } else {
+        const nv = v.slice(0, s) + '  ' + v.slice(e);
+        setValue(nv, s + 2, undefined);
+      }
+      return;
+    }
+
+    /* 列表自动续写 */
+    if (k === 'Enter' && !ev.shiftKey && !ctrl){
+      const v = editor.value, p = editor.selectionStart;
+      if (p === editor.selectionEnd){
+        const ls = v.lastIndexOf('\n', p - 1) + 1;
+        const line = v.slice(ls, p);
+        const m = /^(\s*)([-*+]\s\[[ xX]\]\s|[-*+]\s|\d{1,9}[.)]\s)(.*)$/.exec(line);
+        if (m){
+          ev.preventDefault();
+          if (!m[3].trim()){
+            setValue(v.slice(0, ls) + v.slice(p), ls);
+          } else {
+            let marker = m[2];
+            if (/^\d/.test(marker)) marker = marker.replace(/^\d+/, n => String(parseInt(n, 10) + 1));
+            insertAtCursor('\n' + m[1] + marker);
+          }
+          return;
+        }
+      }
+    }
+
+    if (ctrl && !ev.altKey){
+      const key = k.toLowerCase();
+      if (key === 'b'){ ev.preventDefault(); exec('bold'); return; }
+      if (key === 'i'){ ev.preventDefault(); exec('italic'); return; }
+      if (key === 'u'){ ev.preventDefault(); exec('underline'); return; }
+      if (key === 'k'){ ev.preventDefault(); exec('link'); return; }
+      if (key === 's'){ ev.preventDefault(); saveFile(false); return; }
+      if (key === 'o'){ ev.preventDefault(); openFile(); return; }
+      if (key === 'n'){ ev.preventDefault(); newFile(); return; }
+      if (k === '`' || ev.code === 'Backquote'){ ev.preventDefault(); exec('code'); return; }
+      if (key === 'y' || (ev.shiftKey && key === 'z')){ ev.preventDefault(); redo(); return; }
+      if (key === 'z'){ ev.preventDefault(); undo(); return; }
+      if (k === '1' || k === '2' || k === '3'){ ev.preventDefault(); exec('h' + k); return; }
+    }
+  });
+
+  /* 分栏拖动 */
+  (function initSplitter(){
+    const sp = el('splitter'), ws = el('workspace');
+    let dragging = false;
+    sp.addEventListener('mousedown', ev => { dragging = true; ev.preventDefault(); document.body.style.cursor = 'col-resize'; });
+    window.addEventListener('mousemove', ev => {
+      if (!dragging) return;
+      const rect = ws.getBoundingClientRect();
+      const ratio = clamp((ev.clientX - rect.left) / rect.width, 0.15, 0.85);
+      el('paneEditor').style.flex = ratio + ' 1 0';
+      el('panePreview').style.flex = (1 - ratio) + ' 1 0';
+    });
+    window.addEventListener('mouseup', () => { if (dragging){ dragging = false; document.body.style.cursor = ''; } });
+  })();
+
+  /* 拖拽文件到窗口 */
+  window.addEventListener('beforeunload', ev => {
+    if (state.dirty){ ev.preventDefault(); ev.returnValue = ''; }
+  });
+
+  /* =======================================================================
+   *  启动
+   * ===================================================================== */
+  const DEMO = [
+    '# 欢迎使用 Markdown 编辑器',
+    '',
+    '左侧写 Markdown 源码，右侧实时预览，顶部工具栏像 Word 一样好用。',
+    '',
+    '## 三件事请先记住',
+    '',
+    '1. **直接按 Ctrl+V 粘贴截图**，或把图片文件**拖进窗口**；',
+    '2. 图片会以 base64 **内嵌进 .md 文件本身**，不会只存路径；',
+    '3. 所以把文件复制到别的电脑、发给别人，图片照样能打开。',
+    '',
+    '## 常用格式',
+    '',
+    '- **加粗**、*斜体*、~~删除线~~、==高亮==、`行内代码`',
+    '- 选中文字后用顶部「字号」下拉框可以直接放大缩小',
+    '',
+    '> 提示：巨大的图片会让文件变大，状态栏右下角会实时显示文件体积。',
+    '',
+    '| 功能 | 快捷键 |',
+    '| --- | --- |',
+    '| 加粗 | Ctrl + B |',
+    '| 斜体 | Ctrl + I |',
+    '| 保存 | Ctrl + S |',
+    '| 撤销 | Ctrl + Z |',
+    '',
+    '```js',
+    "console.log('代码块也可以直接写');",
+    '```',
+    '',
+    '---',
+    '',
+    '开始你的写作吧。'
+  ].join('\n');
+
+  buildToolbar();
+  setSrcCollapsed(false);
+
+  function startBlank(){
+    const restored = restoreDraft();
+    if (!restored){
+      loadContent(DEMO, '未命名.md', null);
+      el('stFile').textContent = '未保存';
+    } else {
+      resetHistory();
+    }
+    renderNow();
+    updateStatus();
+    updateTitle();
+  }
+
+  if (HOST){
+    hostCall('init').then(r => {
+      if (r && r.type === 'init' && r.path){
+        loadContent(r.text || '', r.name || '未命名.md', r.path);
+        el('stFile').textContent = '已打开：' + r.path;
+      } else {
+        startBlank();
+      }
+    });
+  } else {
+    startBlank();
+    editor.focus();
+    if (!SUPPORT_FS){
+      toast('当前是网页版，保存会使用下载方式；想要双击 .md 直接用本编辑器打开，请使用桌面版 .exe');
+    }
+  }
+})();
+</script>
+</body>
+</html>

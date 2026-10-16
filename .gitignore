@@ -1,0 +1,17 @@
+# 构建产物 / 依赖缓存（不入库）
+build/
+dist/
+*.exe
+*.pdb
+*.nupkg
+*.zip
+
+# 编辑器 / IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# 系统
+Thumbs.db
+desktop.ini
